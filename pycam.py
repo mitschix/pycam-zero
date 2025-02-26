@@ -38,6 +38,7 @@ PAGE = """
         height: 100vh;
         margin: 0;
         display: flex;
+        flex-direction: column;
         justify-content: center;
         align-items: center;
     }
@@ -46,27 +47,65 @@ PAGE = """
         max-width: 100%;
         height: auto;
     }
+    .buttons {
+        margin-top: 20px;
+    }
+
+    button {
+        background-color: #555;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        margin: 5px;
+        cursor: pointer;
+        font-size: 1em;
+    }
+
+    button:hover {
+        background-color: #777;
+    }
 </style>
 </head>
-<body >
+<body>
 <img src="stream" />
+<div class="buttons">
+    <button onclick="sendRequest('/stop')">Stop</button>
+    <button onclick="sendRequest('/update')">Update</button>
+</div>
+<script>
+function sendRequest(url) {
+    fetch(url, { method: 'GET' })
+    .then(response => {
+        if (response.ok) {
+            console.log('Request successful:', url);
+        } else {
+            console.error('Request failed:', url);
+        }
+    })
+    .catch(error => {
+        console.error('Error during fetch:', error);
+    });
+}
+</script>
 </body>
 </html>
 """
-# <img src="stream.mjpg" width="{WIDTH}" height="{HEIGHT}" />
 
 
 def active_stream_cam(func):
     """Decorator that handles active stream cams."""
 
     def wrap(self, *args, **kwargs):
-        if not self.active_stream:
+        if not self.server.active_stream:
             start_cam()
         result = func(self, *args, **kwargs)
 
-        if not self.active_stream or datetime.now() > self.last_stream_time:
+        if (
+            not self.server.active_stream
+            or datetime.now() > self.server.last_stream_time
+        ):
             stop_cam()
-            self.active_stream = False
+            self.server.active_stream = False
 
         return result
 
@@ -74,9 +113,12 @@ def active_stream_cam(func):
 
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
-    active_stream = False
-    last_stream_time = datetime.now()
-    streaming_time = 1
+    def update_streaming_time(self):
+        current_time = datetime.now()
+        current_end = current_time + timedelta(minutes=self.server.streaming_time)
+        self.server.last_stream_time = current_end
+        logging.info("Current streaming time set to: %s", current_end)
+        return current_end
 
     @active_stream_cam
     def create_still(self):
@@ -89,13 +131,11 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
 
     @active_stream_cam
     def stream(self):
-        self.active_stream = True
-        start_time = datetime.now()
-        current_end = start_time + timedelta(minutes=self.streaming_time)
-        self.last_stream_time = current_end
-        logging.info("Stream stop changed to %s", current_end)
+        self.server.active_stream = True
+        self.update_streaming_time()
+        logging.info("Stream stop changed to %s", self.server.last_stream_time)
         try:
-            while datetime.now() < current_end:
+            while datetime.now() < self.server.last_stream_time:
                 with output.condition:
                     output.condition.wait()
                     frame = output.frame
@@ -112,9 +152,6 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/":
-            # self.send_response(301)
-            # self.send_header('Location', '/index')
-            # self.end_headers()
             content = PAGE.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
@@ -132,6 +169,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             self.create_still()
+        elif self.path == "/update":
+            self.send_response(200)
+            self.end_headers()
+            self.update_streaming_time()
         elif self.path == "/stream":
             self.send_response(200)
             self.send_header("Age", 0)
@@ -161,6 +202,9 @@ class StreamingOutput(io.BufferedIOBase):
 class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
+    active_stream = False
+    last_stream_time = datetime.now()
+    streaming_time = 1
 
 
 def start_cam():
