@@ -133,7 +133,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
         request = picam2.capture_request()
         request.save("main", "/home/pi/still.jpg")
         request.release()
-        print("Still image captured!")
+        logging.info("Still image captured!")
         with open("/home/pi/still.jpg", "rb") as file:
             self.wfile.write(file.read())
 
@@ -224,12 +224,18 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 
 def start_cam():
     logging.info("Cam started - %s!", datetime.now())
-    picam2.start_recording(encoder, FileOutput(output), quality=Quality.VERY_HIGH)
+    try:
+        picam2.start_recording(encoder, FileOutput(output), quality=Quality.VERY_HIGH)
+    except RuntimeError as e:
+        logging.error("Starting cam: %s", e)
 
 
 def stop_cam():
     logging.info("Cam stopped - %s!", datetime.now())
-    picam2.stop_recording()
+    try:
+        picam2.stop_recording()
+    except RuntimeError as e:
+        logging.error("Stopping cam: %s", e)
 
 
 encoder = MJPEGEncoder()
