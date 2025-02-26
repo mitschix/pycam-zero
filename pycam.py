@@ -143,10 +143,7 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
         self.update_streaming_time()
         logging.info("Stream stop changed to %s", self.server.last_stream_time)
         try:
-            while (
-                datetime.now() < self.server.last_stream_time
-                or self.server.active_stream
-            ):
+            while datetime.now() < self.server.last_stream_time:
                 with output.condition:
                     output.condition.wait()
                     frame = output.frame
@@ -156,6 +153,8 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(frame)
                 self.wfile.write(b"\r\n")
+                if not self.server.active_stream:
+                    break
         except Exception as e:
             logging.warning(
                 "Removed streaming client %s: %s", self.client_address, str(e)
