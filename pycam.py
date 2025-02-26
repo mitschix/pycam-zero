@@ -5,6 +5,7 @@
 import io
 import logging
 import socketserver
+import sys
 from datetime import datetime, timedelta
 from http import server
 from threading import Condition
@@ -14,6 +15,8 @@ from libcamera import Transform
 from picamera2 import Picamera2
 from picamera2.encoders import MJPEGEncoder, Quality
 from picamera2.outputs import FileOutput
+
+logging.basicConfig(stream=sys.stdout)
 
 ROTATION = 0  # Use 0, 90 or 270
 # WIDTH = 1944
