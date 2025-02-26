@@ -113,6 +113,11 @@ def active_stream_cam(func):
 
 
 class StreamingHandler(server.BaseHTTPRequestHandler):
+    def stop_stream(self):
+        if self.server.active_stream:
+            self.server.active_stream = False
+            stop_cam()
+
     def update_streaming_time(self):
         current_time = datetime.now()
         current_end = current_time + timedelta(minutes=self.server.streaming_time)
@@ -135,7 +140,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
         self.update_streaming_time()
         logging.info("Stream stop changed to %s", self.server.last_stream_time)
         try:
-            while datetime.now() < self.server.last_stream_time:
+            while (
+                datetime.now() < self.server.last_stream_time
+                or self.server.active_stream
+            ):
                 with output.condition:
                     output.condition.wait()
                     frame = output.frame
@@ -173,6 +181,10 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             self.update_streaming_time()
+        elif self.path == "/stop":
+            self.send_response(200)
+            self.end_headers()
+            self.stop_stream()
         elif self.path == "/stream":
             self.send_response(200)
             self.send_header("Age", 0)
